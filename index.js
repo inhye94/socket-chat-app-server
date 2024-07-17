@@ -50,6 +50,7 @@ io.on("connection", (socket) => {
     callback();
   });
 
+  // 클라이언트가 메세지를 보냄 (user -> all)
   socket.on("sendMessage", (message, callback) => {
     const user = getUser(socket.id);
 
