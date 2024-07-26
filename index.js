@@ -8,7 +8,10 @@ import { addUser, removeUser, getUser, getUsersInRoom } from "./users.js";
 import router from "./router.js";
 
 const PORT = process.env.PORT || 8080;
-let temp = 10;
+let serverTemp = 20;
+let serverMute = false;
+let serverStrength = 1;
+let serverUsername = "";
 
 const app = express();
 app.use(cors());
@@ -29,20 +32,22 @@ io.on("connection", (socket) => {
 
     if (error) return callback(error);
 
-    // 클라이언트의 유저에게 메시지 (admin -> user)
+    // 나한테만 전송, welcome
     socket.emit("message", {
       user: "admin",
       text: `${user.name}, Welcome to the room ${user.room}`,
     });
-    // 같은 룸에 있는 클라이언트의 모든 유저에게 메세지, admin 제외 (admin -> room)
+
+    // 나 빼고 같은 룸의 모든 유저에게 전송, join
     socket.broadcast.to(user.room).emit("message", {
       user: "admin",
       text: `${user.name}, has joined!`,
     });
 
+    // room에 조인
     socket.join(user.room);
 
-    // room에 있는 유저 보여주기
+    // 같은 룸의 모두에게 전송, roomData
     io.to(user.room).emit("roomData", {
       room: user.room,
       users: getUsersInRoom(user.room),
@@ -55,7 +60,7 @@ io.on("connection", (socket) => {
   socket.on("sendMessage", (message, callback) => {
     const user = getUser(socket.id);
 
-    // 클라이언트 모든 유저에게 메시지
+    // 같은 룸의 모두에게 전송
     io.to(user.room).emit("message", { user: user.name, text: message });
     io.to(user.room).emit("roomData", {
       room: user.room,
@@ -70,7 +75,7 @@ io.on("connection", (socket) => {
     const { error, user } = addUser({ id: socket.id, name, room });
 
     if (error) {
-      console.log(error);
+      console.error(error);
       return;
     }
 
@@ -80,55 +85,57 @@ io.on("connection", (socket) => {
     console.log(`${user.name} has joined! (room: ${user.room})`);
 
     // initTemp 알려주기
-    io.to(user.room).emit("initTemp", temp);
+    socket.emit("initTemp", serverTemp);
+
+    // initMute 알려주기
+    socket.emit("initMute", serverMute);
+
+    // initStrength 알려주기
+    socket.emit("initStrength", serverStrength);
+
+    // initUsername 알려주기
+    socket.emit("initUsername", serverUsername);
 
     callback();
   });
 
   // NOTE: plus temp
-  socket.on("plusTemp", ({ name, room }) => {
+  socket.on("changeTemp", ({ name, room, temp }) => {
+    // let user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
     let user = getUser(socket.id);
 
-    if (!user) {
-      const { user: userData } = addUser({ id: socket.id, name, room });
+    console.log(`${user.name} change temp. (temp: ${temp})`);
 
-      user = { ...userData };
+    io.to(user.room).emit("broadcastTemp", { username: user.name, temp });
 
-      // 룸에 들어가기
-      socket.join(user.room);
-
-      console.log(`${user.name} has joined! (room: ${user.room})`);
-    }
-
-    if (temp < 30) {
-      temp += 1;
-      console.log(`${user.name} change temp. (temp: ${temp})`);
-    }
-
-    io.to(user.room).emit("tempChange", { username: user.name, temp });
+    serverTemp = temp;
+    serverUsername = user.name;
   });
 
-  // NOTE: minus temp
-  socket.on("minusTemp", ({ name, room }) => {
+  // NOTE: toggle Mute
+  socket.on("toggleMute", ({ name, room, mute }) => {
+    // let user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
     let user = getUser(socket.id);
 
-    if (!user) {
-      const { user: userData } = addUser({ id: socket.id, name, room });
+    console.log(`${user.name} change mute. (mute: ${mute})`);
 
-      user = { ...userData };
+    io.to(user.room).emit("broadcastMute", { username: user.name, mute });
 
-      // 룸에 들어가기
-      socket.join(user.room);
+    serverMute = mute;
+    serverUsername = user.name;
+  });
 
-      console.log(`${user.name} has joined! (room: ${user.room})`);
-    }
+  // NOTE: changeStrength
+  socket.on("changeStrength", ({ name, room, strength }) => {
+    // const user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
+    let user = getUser(socket.id);
 
-    if (temp > 0) {
-      temp -= 1;
-      console.log(`${user.name} change temp. (temp: ${temp})`);
-    }
+    console.log(`${user.name} change strength. (strength: ${strength})`);
 
-    io.to(user.room).emit("tempChange", { username: user.name, temp });
+    io.to(room).emit("broadcastStrength", { username: user.name, strength });
+
+    serverStrength = strength;
+    serverUsername = user.name;
   });
 
   socket.on("disconnect", () => {
@@ -148,3 +155,13 @@ app.use(router);
 server.listen(PORT, () => {
   console.log(`Server has started on port ${PORT}`);
 });
+
+function reEntryRoom(socket, name, room) {
+  const { user } = addUser({ id: socket.id, name, room });
+
+  socket.join(room);
+
+  console.log(`${name} has joined! (room: ${room})`);
+
+  return user;
+}
