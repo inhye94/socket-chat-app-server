@@ -81,27 +81,19 @@ io.on("connection", (socket) => {
 
     // 룸에 들어가기
     socket.join(user.room);
-
     console.log(`${user.name} has joined! (room: ${user.room})`);
 
-    // initTemp 알려주기
+    // 초기값 emit
     socket.emit("initTemp", serverTemp);
-
-    // initMute 알려주기
     socket.emit("initMute", serverMute);
-
-    // initStrength 알려주기
     socket.emit("initStrength", serverStrength);
-
-    // initUsername 알려주기
     socket.emit("initUsername", serverUsername);
 
     callback();
   });
 
   // NOTE: plus temp
-  socket.on("changeTemp", ({ name, room, temp }) => {
-    // let user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
+  socket.on("changeTemp", ({ temp }) => {
     let user = getUser(socket.id);
 
     console.log(`${user.name} change temp. (temp: ${temp})`);
@@ -113,8 +105,7 @@ io.on("connection", (socket) => {
   });
 
   // NOTE: toggle Mute
-  socket.on("toggleMute", ({ name, room, mute }) => {
-    // let user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
+  socket.on("toggleMute", ({ mute }) => {
     let user = getUser(socket.id);
 
     console.log(`${user.name} change mute. (mute: ${mute})`);
@@ -126,13 +117,15 @@ io.on("connection", (socket) => {
   });
 
   // NOTE: changeStrength
-  socket.on("changeStrength", ({ name, room, strength }) => {
-    // const user = getUser(socket.id) ?? reEntryRoom(socket, name, room);
+  socket.on("changeStrength", ({ strength }) => {
     let user = getUser(socket.id);
 
     console.log(`${user.name} change strength. (strength: ${strength})`);
 
-    io.to(room).emit("broadcastStrength", { username: user.name, strength });
+    io.to(user.room).emit("broadcastStrength", {
+      username: user.name,
+      strength,
+    });
 
     serverStrength = strength;
     serverUsername = user.name;
@@ -155,13 +148,3 @@ app.use(router);
 server.listen(PORT, () => {
   console.log(`Server has started on port ${PORT}`);
 });
-
-function reEntryRoom(socket, name, room) {
-  const { user } = addUser({ id: socket.id, name, room });
-
-  socket.join(room);
-
-  console.log(`${name} has joined! (room: ${room})`);
-
-  return user;
-}
